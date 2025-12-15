@@ -2,25 +2,52 @@ import streamlit as st
 import csv
 import os
 from datetime import datetime
+import pytz
 
 FILE_NAME = "attendance.csv"
 
-# Ensure CSV file exists
+# ----------------- FILE SETUP ----------------- #
 def create_file_if_not_exists():
     if not os.path.exists(FILE_NAME):
         with open(FILE_NAME, "w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(["Name", "Date", "Time", "Status"])
 
-# Mark attendance
+# ----------------- LOAD DATA ----------------- #
+def load_data():
+    data = []
+    if os.path.exists(FILE_NAME):
+        with open(FILE_NAME, "r", newline="") as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                if len(row) == 4:
+                    data.append(row)
+    return data
+
+# ----------------- DUPLICATE CHECK ----------------- #
+def already_marked_today(name, today):
+    data = load_data()
+    for row in data:
+        if row[0].lower() == name.lower() and row[1] == today:
+            return True
+    return False
+
+# ----------------- MARK ATTENDANCE ----------------- #
 def mark_attendance(name, status):
     if name == "" or status == "":
         st.error("Please fill all fields")
         return
 
-    now = datetime.now()
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+
     date_today = now.strftime("%d-%m-%Y")
     time_now = now.strftime("%H:%M:%S")
+
+    if already_marked_today(name, date_today):
+        st.warning("Attendance already marked for today")
+        return
 
     with open(FILE_NAME, "a", newline="") as file:
         writer = csv.writer(file)
@@ -28,24 +55,8 @@ def mark_attendance(name, status):
 
     st.success("Attendance marked successfully")
 
-# Load attendance data
-def load_data():
-    data = []
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "r", newline="") as file:
-            reader = csv.reader(file)
-            next(reader, None)  # skip header
-            for row in reader:
-                if len(row) == 4:
-                    data.append(row)
-    return data
-
-# Delete a record
+# ----------------- DELETE RECORD ----------------- #
 def delete_attendance(selected_row):
-    if not selected_row:
-        st.warning("Select a record to delete")
-        return
-
     with open(FILE_NAME, "r", newline="") as file:
         rows = list(csv.reader(file))
 
@@ -55,15 +66,23 @@ def delete_attendance(selected_row):
         for row in rows[1:]:
             if row != selected_row:
                 writer.writerow(row)
+
     st.success("Attendance deleted successfully")
 
-# ---------------- Streamlit UI ---------------- #
+# ----------------- CLEAR ALL ----------------- #
+def clear_all():
+    with open(FILE_NAME, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Name", "Date", "Time", "Status"])
+    st.experimental_rerun()
 
-st.title("Attendance Management System")
+# ----------------- STREAMLIT UI ----------------- #
+st.set_page_config(page_title="Attendance Management System", layout="centered")
+
+st.title("📋 Attendance Management System")
 
 create_file_if_not_exists()
 
-# Input fields
 name = st.text_input("Student Name")
 status = st.selectbox("Status", ["", "Present", "Absent"])
 
@@ -71,7 +90,7 @@ if st.button("Mark Attendance"):
     mark_attendance(name, status)
 
 st.markdown("---")
-st.subheader("Attendance Records")
+st.subheader("📄 Attendance Records")
 
 data = load_data()
 
@@ -82,21 +101,27 @@ if data:
         col2.write(row[1])
         col3.write(row[2])
         col4.write(row[3])
-        if col5.button("Delete", key=i):
+        if col5.button("Delete", key=f"del_{i}"):
             delete_attendance(row)
             st.experimental_rerun()
 else:
-    st.info("No attendance records found.")
+    st.info("No attendance records found")
 
-# Download CSV
-if st.button("Download CSV"):
+st.markdown("---")
+
+# ----------------- ACTION BUTTONS ----------------- #
+colA, colB = st.columns(2)
+
+with colA:
+    if st.button("🗑 Clear All Records"):
+        clear_all()
+
+with colB:
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "rb") as f:
             st.download_button(
-                label="Download Attendance CSV",
+                label="⬇ Download CSV",
                 data=f,
                 file_name="attendance.csv",
                 mime="text/csv"
             )
-    else:
-        st.error("No attendance data found")
