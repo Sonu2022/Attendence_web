@@ -51,14 +51,15 @@ def mark_attendance(name, status):
     today = now.strftime("%d-%m-%Y")
 
     rows = load_data()
+    name_lower = name.strip().lower()
 
-    # Block if attendance for same student and same date exists
+    # Check for existing attendance (case-insensitive)
     for row in rows:
-        if row[0] == name and row[1] == today:
+        if row[0].strip().lower() == name_lower and row[1] == today:
             st.warning(f"Attendance for {name} has already been marked today!")
             return
 
-    # Append attendance
+    # Append new attendance
     with open(USER_FILE, "a", newline="") as f:
         csv.writer(f).writerow([name, today, now.strftime("%H:%M:%S"), status])
 
