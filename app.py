@@ -4,35 +4,43 @@ import os
 from datetime import datetime
 import pytz
 
-FILE_NAME = "attendance.csv"
+# ---------- CONFIG ----------
+DATA_DIR = "attendance_data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
-# -------------------- FILE SETUP -------------------- #
-def create_file_if_not_exists():
-    if not os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "w", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(["Name", "Date", "Time", "Status"])
+st.set_page_config("Attendance Management System", layout="centered")
+st.title("📋 Attendance Management System")
 
-# -------------------- LOAD DATA -------------------- #
+# ---------- LOGIN ----------
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+
+if not st.session_state.user_email:
+    email = st.text_input("Enter your Email ID")
+    if st.button("Login"):
+        if email and "@" in email:
+            st.session_state.user_email = email.lower()
+            st.rerun()
+        else:
+            st.error("Please enter a valid email")
+    st.stop()
+
+# ---------- USER-SPECIFIC FILE ----------
+safe_email = st.session_state.user_email.replace("@", "_").replace(".", "_")
+USER_FILE = os.path.join(DATA_DIR, f"{safe_email}.csv")
+
+# ---------- FILE CREATE ----------
+if not os.path.exists(USER_FILE):
+    with open(USER_FILE, "w", newline="") as f:
+        csv.writer(f).writerow(["Name", "Date", "Time", "Status"])
+
+# ---------- FUNCTIONS ----------
 def load_data():
-    data = []
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "r", newline="") as file:
-            reader = csv.reader(file)
-            next(reader, None)
-            for row in reader:
-                if len(row) == 4:
-                    data.append(row)
-    return data
+    with open(USER_FILE, "r", newline="") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        return list(reader)
 
-# -------------------- DUPLICATE CHECK -------------------- #
-def already_marked_today(name, today):
-    for row in load_data():
-        if row[0].lower() == name.lower() and row[1] == today:
-            return True
-    return False
-
-# -------------------- MARK ATTENDANCE -------------------- #
 def mark_attendance(name, status):
     if not name or not status:
         st.error("Please fill all fields")
@@ -41,42 +49,27 @@ def mark_attendance(name, status):
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
 
-    date_today = now.strftime("%d-%m-%Y")
-    time_now = now.strftime("%H:%M:%S")
+    with open(USER_FILE, "a", newline="") as f:
+        csv.writer(f).writerow([
+            name,
+            now.strftime("%d-%m-%Y"),
+            now.strftime("%H:%M:%S"),
+            status
+        ])
 
-    if already_marked_today(name, date_today):
-        st.warning("Attendance already marked for today")
-        return
+    st.success("Attendance marked")
 
-    with open(FILE_NAME, "a", newline="") as file:
-        csv.writer(file).writerow([name, date_today, time_now, status])
-
-    st.success("Attendance marked successfully")
-
-# -------------------- DELETE RECORD -------------------- #
 def delete_attendance(row_to_delete):
-    with open(FILE_NAME, "r", newline="") as file:
-        rows = list(csv.reader(file))
-
-    with open(FILE_NAME, "w", newline="") as file:
-        writer = csv.writer(file)
+    rows = load_data()
+    with open(USER_FILE, "w", newline="") as f:
+        writer = csv.writer(f)
         writer.writerow(["Name", "Date", "Time", "Status"])
-        for row in rows[1:]:
+        for row in rows:
             if row != row_to_delete:
                 writer.writerow(row)
 
-# -------------------- CLEAR ALL -------------------- #
-def clear_all():
-    with open(FILE_NAME, "w", newline="") as file:
-        csv.writer(file).writerow(["Name", "Date", "Time", "Status"])
-    st.rerun()
-
-# -------------------- STREAMLIT UI -------------------- #
-st.set_page_config("Attendance Management System", layout="centered")
-
-st.title("📋 Attendance Management System")
-
-create_file_if_not_exists()
+# ---------- UI ----------
+st.success(f"Logged in as: {st.session_state.user_email}")
 
 name = st.text_input("Student Name")
 status = st.selectbox("Status", ["", "Present", "Absent"])
@@ -85,7 +78,7 @@ if st.button("Mark Attendance"):
     mark_attendance(name, status)
 
 st.markdown("---")
-st.subheader("📄 Attendance Records")
+st.subheader("📄 My Attendance (Only My Data)")
 
 data = load_data()
 
@@ -96,28 +89,24 @@ if data:
         c2.write(row[1])
         c3.write(row[2])
         c4.write(row[3])
-
         if c5.button("Delete", key=f"del_{i}"):
             delete_attendance(row)
-            st.success("Attendance deleted successfully")
             st.rerun()
 else:
     st.info("No attendance records found")
 
 st.markdown("---")
 
-col1, col2 = st.columns(2)
+# ---------- DOWNLOAD ----------
+with open(USER_FILE, "rb") as f:
+    st.download_button(
+        "⬇ Download My CSV",
+        f,
+        file_name="attendance.csv",
+        mime="text/csv"
+    )
 
-with col1:
-    if st.button("🗑 Clear All Records"):
-        clear_all()
-
-with col2:
-    if os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "rb") as f:
-            st.download_button(
-                "⬇ Download CSV",
-                f,
-                "attendance.csv",
-                "text/csv"
-            )
+# ---------- LOGOUT ----------
+if st.button("🚪 Logout"):
+    st.session_state.user_email = ""
+    st.rerun()
