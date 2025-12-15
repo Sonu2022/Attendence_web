@@ -38,7 +38,7 @@ if not os.path.exists(USER_FILE):
 def load_data():
     with open(USER_FILE, "r", newline="") as f:
         reader = csv.reader(f)
-        next(reader, None)
+        next(reader, None)  # skip header
         return list(reader)
 
 def mark_attendance(name, status):
@@ -48,14 +48,19 @@ def mark_attendance(name, status):
 
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
+    today = now.strftime("%d-%m-%Y")
 
+    rows = load_data()
+
+    # Block if attendance for same student and same date exists
+    for row in rows:
+        if row[0] == name and row[1] == today:
+            st.warning(f"Attendance for {name} has already been marked today!")
+            return
+
+    # Append attendance
     with open(USER_FILE, "a", newline="") as f:
-        csv.writer(f).writerow([
-            name,
-            now.strftime("%d-%m-%Y"),
-            now.strftime("%H:%M:%S"),
-            status
-        ])
+        csv.writer(f).writerow([name, today, now.strftime("%H:%M:%S"), status])
 
     st.success("Attendance marked")
 
